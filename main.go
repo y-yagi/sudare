@@ -10,6 +10,7 @@ import (
 	"net/http/httputil"
 	"os"
 	"os/signal"
+	"regexp"
 	"sync"
 	"time"
 
@@ -194,11 +195,17 @@ func main() {
 
 	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
 
-	var httpsHanlder goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		hosts[ctx.Session] = host
-		return goproxy.OkConnect, host
-	}
-	proxy.OnRequest().HandleConnect(httpsHanlder)
+	// var httpsHanlder goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+	// 	hosts[ctx.Session] = host
+	// 	return goproxy.OkConnect, host
+	// }
+	// proxy.OnRequest().HandleConnect(httpsHanlder)
+
+	proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(`.*[jpg|png]$`))).DoFunc(
+		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+			return r, goproxy.NewResponse(r, goproxy.ContentTypeText, http.StatusForbidden, "Don't waste your GIGA!")
+		})
+
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		ctx.RoundTripper = goproxy.RoundTripperFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
 			ctx.UserData, resp, err = tr.DetailedRoundTrip(req)
