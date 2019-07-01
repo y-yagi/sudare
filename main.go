@@ -201,7 +201,7 @@ func main() {
 	// }
 	// proxy.OnRequest().HandleConnect(httpsHanlder)
 
-	proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(`.*[jpg|png]$`))).DoFunc(
+	proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(`.*[jpg|png|svg]$`))).DoFunc(
 		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 			return r, goproxy.NewResponse(r, goproxy.ContentTypeText, http.StatusForbidden, "Don't waste your GIGA!")
 		})
