@@ -16,6 +16,7 @@ import (
 
 	"github.com/elazarl/goproxy"
 	"github.com/elazarl/goproxy/transport"
+	"github.com/y-yagi/debuglog"
 )
 
 type Meta struct {
@@ -28,6 +29,7 @@ type Meta struct {
 }
 
 var hosts map[int64]string
+var debuglogger *debuglog.Logger
 
 func fprintf(nr *int64, err *error, w io.Writer, pat string, a ...interface{}) {
 	if *err != nil {
@@ -171,11 +173,13 @@ func (sl *stoppableListener) Accept() (net.Conn, error) {
 		return c, err
 	}
 	sl.Add(1)
+	debuglogger.Printf("[Accept] Add sync.WaitGroup\n")
 	return &stoppableConn{c, &sl.WaitGroup}, nil
 }
 
 func (sc *stoppableConn) Close() error {
 	sc.wg.Done()
+	debuglogger.Printf("[Close] Done sync.WaitGroup\n")
 	return sc.Conn.Close()
 }
 
@@ -187,6 +191,7 @@ func main() {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = *verbose
 	hosts = map[int64]string{}
+	debuglogger = debuglog.New(os.Stdout)
 
 	logger, err := NewLogger("proxy.log")
 	if err != nil {
