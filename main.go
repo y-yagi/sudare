@@ -241,7 +241,7 @@ func main() {
 		sl.Done()
 	}()
 
-	log.Println("Starting Proxy")
+	log.Println("Starting Proxy. addr:", *addr)
 	http.Serve(sl, proxy)
 	sl.Wait()
 	log.Println("All connections closed - exit")
