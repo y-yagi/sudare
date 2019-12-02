@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -186,8 +189,13 @@ func (sc *stoppableConn) Close() error {
 func main() {
 	verbose := flag.Bool("v", false, "should every proxy request be logged to stdout")
 	addr := flag.String("l", ":8080", "on which address should the proxy listen")
+	certfile := flag.String("cert-pem", "", "ca cert file")
+	keyfile := flag.String("key-pem", "", "ca key file")
 	flag.Parse()
 
+	if err := setCA(*certfile, *keyfile); err != nil {
+		log.Fatal("Set CA error", err)
+	}
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = *verbose
 	hosts = map[int64]string{}
@@ -200,11 +208,11 @@ func main() {
 
 	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
 
-	// var httpsHanlder goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-	// 	hosts[ctx.Session] = host
-	// 	return goproxy.OkConnect, host
-	// }
-	// proxy.OnRequest().HandleConnect(httpsHanlder)
+	var httpsHanlder goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		hosts[ctx.Session] = host
+		return goproxy.OkConnect, host
+	}
+	proxy.OnRequest().HandleConnect(httpsHanlder)
 
 	proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(`.*[jpg|png|svg]$`))).DoFunc(
 		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
@@ -245,4 +253,30 @@ func main() {
 	http.Serve(sl, proxy)
 	sl.Wait()
 	log.Println("All connections closed - exit")
+}
+
+func setCA(certfile, keyfile string) error {
+	caCert, err := ioutil.ReadFile(certfile)
+	if err != nil {
+		return err
+	}
+	caKey, err := ioutil.ReadFile(keyfile)
+	if err != nil {
+		return err
+	}
+
+	goproxyCa, err := tls.X509KeyPair(caCert, caKey)
+	if err != nil {
+		return err
+	}
+	if goproxyCa.Leaf, err = x509.ParseCertificate(goproxyCa.Certificate[0]); err != nil {
+		return err
+	}
+
+	goproxy.GoproxyCa = goproxyCa
+	goproxy.OkConnect = &goproxy.ConnectAction{Action: goproxy.ConnectAccept, TLSConfig: goproxy.TLSConfigFromCA(&goproxyCa)}
+	goproxy.MitmConnect = &goproxy.ConnectAction{Action: goproxy.ConnectMitm, TLSConfig: goproxy.TLSConfigFromCA(&goproxyCa)}
+	goproxy.HTTPMitmConnect = &goproxy.ConnectAction{Action: goproxy.ConnectHTTPMitm, TLSConfig: goproxy.TLSConfigFromCA(&goproxyCa)}
+	goproxy.RejectConnect = &goproxy.ConnectAction{Action: goproxy.ConnectReject, TLSConfig: goproxy.TLSConfigFromCA(&goproxyCa)}
+	return nil
 }
